@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +31,28 @@ const renderPlayerIcon = (
   size: number = 24,
   color: string = '#0ff'
 ) => {
+  if (Platform.OS === 'web') {
+    // Webではテキストに置き換え（シャドウ付き）
+    const webStyle = {
+      color: color,
+      fontSize: size,
+      fontWeight: 'bold' as const,
+      fontFamily: 'monospace',
+    };
+
+    // @ts-ignore: テキストシャドウはWebのみで有効
+    if (Platform.OS === 'web') {
+      // @ts-ignore: Web用のスタイル
+      webStyle.textShadow = `0 0 10px ${color}`;
+    }
+
+    return (
+      <Text style={webStyle}>
+        {player === 'O' ? '○' : player === 'X' ? '×' : ''}
+      </Text>
+    );
+  }
+
   if (player === 'O') {
     return (
       <View style={styles.iconShadow}>
