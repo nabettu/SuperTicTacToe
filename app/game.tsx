@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Player, Board, PieceMeta, CpuLevel } from './types';
 import { getCpuMove } from './utils/cpuStrategy';
+import { listenToRoomUpdates, updateGameState } from './utils/firebase';
 
 // ユーティリティ関数：指定されたミリ秒待機する Promise を返す
 const sleep = (ms: number): Promise<void> => {
@@ -71,11 +72,15 @@ const renderPlayerIcon = (
 
 export default function GameScreen() {
   const router = useRouter();
-  const { mode, level } = useLocalSearchParams<{
+  const { mode, level, roomId, role } = useLocalSearchParams<{
     mode: string;
     level: CpuLevel;
+    roomId: string;
+    role: string;
   }>();
   const cpuLevel = (level as CpuLevel) || 'normal';
+  const isOnlineMode = mode === 'online';
+  const isHost = role === 'host';
 
   const [board, setBoard] = useState<Board>(Array(9).fill(null));
   const [boardMeta, setBoardMeta] = useState<PieceMeta[]>(Array(9).fill(null));
@@ -83,6 +88,12 @@ export default function GameScreen() {
   const [winner, setWinner] = useState<Player | 'draw' | null>(null);
   const [moveCount, setMoveCount] = useState<number>(0);
   const [fadingPieceIndex, setFadingPieceIndex] = useState<number | null>(null);
+  const [waitingForOpponent, setWaitingForOpponent] = useState<boolean>(false);
+  const [opponentDisconnected, setOpponentDisconnected] =
+    useState<boolean>(false);
+
+  // オンラインモードの自分のプレイヤー種別を設定
+  const myPlayer: Player | null = isOnlineMode ? (isHost ? 'O' : 'X') : null;
 
   const checkWinner = (squares: Board): Player | 'draw' | null => {
     const lines = [
@@ -143,7 +154,66 @@ export default function GameScreen() {
     }
   }, [currentPlayer, winner]);
 
-  const makeMove = (index: number) => {
+  // オンラインモード用の部屋状態同期
+  useEffect(() => {
+    if (isOnlineMode && roomId) {
+      // 最初はホストがマッチング待ちの状態に
+      if (isHost) {
+        setWaitingForOpponent(true);
+
+        // 対戦開始時にランダムで先攻を決定
+        const isFirstPlayerRandom = Math.random() >= 0.5 ? 'O' : 'X';
+        setCurrentPlayer(isFirstPlayerRandom);
+      }
+
+      // 部屋の状態変化を監視
+      const unsubscribe = listenToRoomUpdates(roomId, (roomData) => {
+        if (!roomData) return;
+
+        // 対戦相手がいない場合（ゲストの場合は起こらない）
+        if (isHost && !roomData.guestId) {
+          setWaitingForOpponent(true);
+          return;
+        }
+
+        // 対戦相手が見つかった
+        if (isHost && roomData.guestId && waitingForOpponent) {
+          setWaitingForOpponent(false);
+
+          // 対戦開始時の状態をFirebaseに保存
+          updateGameState(
+            roomId,
+            board,
+            boardMeta,
+            currentPlayer,
+            null,
+            moveCount
+          );
+        }
+
+        // ゲーム状態の同期
+        if (roomData.status === 'playing') {
+          setBoard(roomData.board);
+          setBoardMeta(roomData.boardMeta);
+          setCurrentPlayer(roomData.currentPlayer);
+          setWinner(roomData.winner);
+          setMoveCount(roomData.moveCount);
+        }
+      });
+
+      // クリーンアップ関数
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [isOnlineMode, roomId, isHost]);
+
+  // 手を指す処理
+  const makeMove = async (index: number) => {
+    // オンラインモードで自分のターンでない場合は何もしない
+    if (isOnlineMode && currentPlayer !== myPlayer) return;
+
+    // すでにコマがある場所、または勝敗が決まっている場合は何もしない
     if (board[index] || winner) return;
 
     const playerPieceCount = countPlayerPieces(currentPlayer);
@@ -161,6 +231,7 @@ export default function GameScreen() {
     newBoard[index] = currentPlayer;
     newBoardMeta[index] = { player: currentPlayer, moveOrder: moveCount };
 
+    // ローカル状態の更新
     setBoard(newBoard);
     setBoardMeta(newBoardMeta);
     setMoveCount(moveCount + 1);
@@ -169,10 +240,35 @@ export default function GameScreen() {
     const newWinner = checkWinner(newBoard);
     if (newWinner) {
       setWinner(newWinner);
+
+      // オンラインモードの場合、勝敗結果をFirebaseに保存
+      if (isOnlineMode && roomId) {
+        await updateGameState(
+          roomId,
+          newBoard,
+          newBoardMeta,
+          currentPlayer,
+          newWinner,
+          moveCount + 1
+        );
+      }
       return;
     }
 
-    setCurrentPlayer(currentPlayer === 'O' ? 'X' : 'O');
+    const nextPlayer = currentPlayer === 'O' ? 'X' : 'O';
+    setCurrentPlayer(nextPlayer);
+
+    // オンラインモードの場合、状態をFirebaseに保存
+    if (isOnlineMode && roomId) {
+      await updateGameState(
+        roomId,
+        newBoard,
+        newBoardMeta,
+        nextPlayer,
+        null,
+        moveCount + 1
+      );
+    }
   };
 
   useEffect(() => {
@@ -268,6 +364,26 @@ export default function GameScreen() {
       );
     }
 
+    // オンラインモードのターン表示を修正
+    if (isOnlineMode) {
+      const isMyTurn = currentPlayer === myPlayer;
+      return (
+        <View style={styles.turnContainer}>
+          <Text
+            style={[styles.turnText, { color: getPlayerColor(currentPlayer) }]}
+          >
+            {isMyTurn ? 'あなた' : '相手'}
+          </Text>
+          {renderPlayerIcon(currentPlayer, 28, getPlayerColor(currentPlayer))}
+          <Text
+            style={[styles.turnText, { color: getPlayerColor(currentPlayer) }]}
+          >
+            のターン
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.turnContainer}>
         {renderPlayerIcon(currentPlayer, 28, getPlayerColor(currentPlayer))}
@@ -287,6 +403,16 @@ export default function GameScreen() {
     setWinner(null);
     setMoveCount(0);
     setFadingPieceIndex(null);
+    if (isOnlineMode && roomId) {
+      updateGameState(
+        roomId,
+        [null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null],
+        'X',
+        null,
+        0
+      );
+    }
   };
 
   const renderPlayerSymbol = (player: Player | null) => {
@@ -327,10 +453,16 @@ export default function GameScreen() {
       )}
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={resetGame}>
-          <Text style={styles.buttonText}>リセット</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+        {/* オンラインモードでは勝敗が決まった場合のみリセットボタンを表示する、さらにホストだけに表示 */}
+        {(mode !== 'online' || (winner && isHost)) && (
+          <TouchableOpacity style={styles.button} onPress={resetGame}>
+            <Text style={styles.buttonText}>リセット</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => router.push('/')}
+        >
           <Text style={styles.buttonText}>タイトルへ</Text>
         </TouchableOpacity>
       </View>

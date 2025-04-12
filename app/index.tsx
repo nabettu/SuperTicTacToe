@@ -69,6 +69,12 @@ export default function TitleScreen() {
           <Text style={styles.buttonText}>ローカル対戦</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={[styles.button, styles.onlineButton]}
+          onPress={() => router.push('/matching' as any)}
+        >
+          <Text style={styles.buttonText}>オンライン対戦</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.button, styles.howToPlayButton]}
           onPress={() => setHowToPlayVisible(true)}
         >
@@ -123,6 +129,10 @@ const styles = StyleSheet.create({
   howToPlayButton: {
     marginTop: 20,
     backgroundColor: 'rgba(0, 128, 255, 0.1)',
+  },
+  onlineButton: {
+    backgroundColor: 'rgba(255, 0, 255, 0.1)',
+    borderColor: '#f0f',
   },
   buttonText: {
     fontFamily: 'Orbitron-Regular',
