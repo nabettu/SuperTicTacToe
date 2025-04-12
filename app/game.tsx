@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Player, Board, PieceMeta, CpuLevel } from './types';
 import { getCpuMove } from './utils/cpuStrategy';
 
@@ -15,6 +17,28 @@ const cpuLevelText = {
   easy: 'かんたん',
   normal: 'ふつう',
   hard: 'むずかしい',
+};
+
+// ユーティリティ関数を修正
+const renderPlayerIcon = (
+  player: Player | null,
+  size: number = 24,
+  color: string = '#0ff'
+) => {
+  if (player === 'O') {
+    return (
+      <View style={styles.iconShadow}>
+        <Ionicons name="ellipse-outline" size={size} color={color} />
+      </View>
+    );
+  } else if (player === 'X') {
+    return (
+      <View style={styles.iconShadow}>
+        <Ionicons name="close" size={size} color={color} />
+      </View>
+    );
+  }
+  return null;
 };
 
 export default function GameScreen() {
@@ -147,15 +171,85 @@ export default function GameScreen() {
   };
 
   const getTurnText = () => {
-    if (winner) {
-      return winner === 'draw' ? '引き分け!' : `${winner}の勝利!`;
+    if (winner === 'draw') {
+      return '引き分け!';
+    } else if (winner) {
+      return (
+        <View style={styles.winnerContainer}>
+          {renderPlayerIcon(winner, 28, getPlayerColor(winner))}
+          <Text style={[styles.turnText, { color: getPlayerColor(winner) }]}>
+            の勝利!
+          </Text>
+        </View>
+      );
     }
 
     if (mode === 'cpu') {
-      return currentPlayer === 'O' ? 'あなたのターン' : 'CPUのターン';
+      return (
+        <View style={styles.turnContainer}>
+          {currentPlayer === 'O' ? (
+            <>
+              <Text
+                style={[
+                  styles.turnText,
+                  { color: getPlayerColor(currentPlayer) },
+                ]}
+              >
+                あなた
+              </Text>
+              {renderPlayerIcon(
+                currentPlayer,
+                28,
+                getPlayerColor(currentPlayer)
+              )}
+              <Text
+                style={[
+                  styles.turnText,
+                  { color: getPlayerColor(currentPlayer) },
+                ]}
+              >
+                のターン
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text
+                style={[
+                  styles.turnText,
+                  { color: getPlayerColor(currentPlayer) },
+                ]}
+              >
+                CPU
+              </Text>
+              {renderPlayerIcon(
+                currentPlayer,
+                28,
+                getPlayerColor(currentPlayer)
+              )}
+              <Text
+                style={[
+                  styles.turnText,
+                  { color: getPlayerColor(currentPlayer) },
+                ]}
+              >
+                のターン
+              </Text>
+            </>
+          )}
+        </View>
+      );
     }
 
-    return `${currentPlayer}のターン`;
+    return (
+      <View style={styles.turnContainer}>
+        {renderPlayerIcon(currentPlayer, 28, getPlayerColor(currentPlayer))}
+        <Text
+          style={[styles.turnText, { color: getPlayerColor(currentPlayer) }]}
+        >
+          のターン
+        </Text>
+      </View>
+    );
   };
 
   const resetGame = () => {
@@ -171,38 +265,15 @@ export default function GameScreen() {
     if (!player) return null;
 
     if (player === 'O') {
-      // 円を描画（サイズを小さく調整）
-      return (
-        <View
-          style={[
-            styles.symbol,
-            styles.circleSymbol,
-            { borderColor: getPlayerColor(player) },
-          ]}
-        />
-      );
+      return renderPlayerIcon(player, 40, getPlayerColor(player));
     } else {
-      // X はテキストのまま
-      return (
-        <Text style={[styles.cellText, { color: getPlayerColor(player) }]}>
-          {player}
-        </Text>
-      );
+      return renderPlayerIcon(player, 48, getPlayerColor(player));
     }
   };
 
   return (
     <LinearGradient colors={['#000420', '#000000']} style={styles.container}>
-      <View style={styles.header}>
-        <Text
-          style={[
-            styles.turnText,
-            { color: winner ? '#0ff' : getPlayerColor(currentPlayer) },
-          ]}
-        >
-          {getTurnText()}
-        </Text>
-      </View>
+      <View style={styles.header}>{getTurnText()}</View>
 
       <View style={styles.board}>
         {board.map((cell, index) => (
@@ -249,6 +320,14 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 40,
   },
+  turnContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  winnerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   turnText: {
     fontFamily: 'Orbitron-Bold',
     fontSize: 24,
@@ -276,17 +355,6 @@ const styles = StyleSheet.create({
   cellText: {
     fontFamily: 'Orbitron-Bold',
     fontSize: 40,
-  },
-  // シンボル共通スタイル
-  symbol: {
-    width: 40,
-    height: 40,
-  },
-  // O シンボル用スタイル（円）
-  circleSymbol: {
-    borderWidth: 4,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
   },
   levelContainer: {
     marginTop: 20,
@@ -317,5 +385,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Orbitron-Regular',
     color: '#0ff',
     fontSize: 16,
+  },
+  iconShadow: {
+    shadowColor: '#0ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 5, // Androidでの対応
   },
 });

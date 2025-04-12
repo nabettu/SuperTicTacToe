@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import HowToPlayModal from './components/HowToPlayModal';
 import { checkIfFirstLaunch } from './utils/storage';
 
@@ -29,7 +30,19 @@ export default function TitleScreen() {
         onClose={() => setHowToPlayVisible(false)}
       />
 
-      <Text style={styles.title}>スーパーマルバツゲーム</Text>
+      <View style={styles.titleContainer}>
+        <Text style={styles.titleText}>Super</Text>
+        <View style={styles.iconContainer}>
+          <Ionicons
+            name="ellipse-outline"
+            size={36}
+            color="#0ff"
+            style={styles.icon}
+          />
+          <Ionicons name="close" size={44} color="#0ff" style={styles.icon} />
+        </View>
+        <Text style={styles.titleText}>Game</Text>
+      </View>
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={styles.button}
@@ -73,14 +86,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#000',
   },
-  title: {
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 60,
+  },
+  titleText: {
     fontFamily: 'Orbitron-Bold',
     fontSize: 32,
     color: '#0ff',
     textShadowColor: '#0ff',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 10,
-    marginBottom: 60,
+  },
+  iconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  icon: {
+    textShadowColor: '#0ff',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   buttonContainer: {
     gap: 20,
