@@ -1,32 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 部屋に関するルール - 認証を必要としない
+    // 部屋に関するルール
     match /rooms/{roomId} {
-      // 読み取り: 誰でも可能
-      allow get, list: if true;
+      // 読み取り: リストはできないが、特定の部屋IDを知っている場合のみ取得可能
+      allow list: if request.auth != null && 
+                 (resource.data.hostId == request.auth.uid || 
+                  resource.data.guestId == request.auth.uid || 
+                  request.resource.data.status == 'waiting');
+      allow get: if request.auth != null;
       
-      // 作成: 誰でも可能
-      allow create: if request.resource.data.hostId is string &&
+      // 作成: 誰でも匿名認証していれば部屋を作成可能
+      allow create: if request.auth != null && 
+                     request.resource.data.hostId == request.auth.uid &&
                      request.resource.data.status == 'waiting';
       
       // 更新: 以下の条件で更新可能
-      // 1. 部屋のホストかゲストである、またはゲストIDがまだ設定されていない場合に新規参加
-      // 2. 重要なフィールド（hostId）が変更されていない
-      allow update: if (
+      // 1. 認証済みユーザーである
+      // 2. 部屋のホストかゲストである、またはゲストIDがまだ設定されていない場合に新規参加
+      // 3. 重要なフィールド（hostId）が変更されていない
+      allow update: if request.auth != null && 
+                     (
                        // ホストかゲストによる更新
-                       (resource.data.hostId == request.resource.data.hostId && 
-                        (resource.data.hostId == request.resource.data.hostId || 
-                         resource.data.guestId == request.resource.data.guestId)) ||
+                       (resource.data.hostId == request.auth.uid || 
+                        resource.data.guestId == request.auth.uid) ||
                        // 新規ゲスト参加（waiting状態でゲストIDが未設定の場合）
                        (resource.data.guestId == null && 
                         resource.data.status == "waiting" &&
-                        request.resource.data.guestId is string)
+                        request.resource.data.guestId == request.auth.uid)
                      ) &&
                      request.resource.data.hostId == resource.data.hostId;
       
       // 削除: 部屋のホストのみ削除可能
-      allow delete: if false;
+      allow delete: if request.auth != null && 
+                     resource.data.hostId == request.auth.uid;
     }
     
     // その他のコレクションはデフォルトで拒否

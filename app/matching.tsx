@@ -7,18 +7,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   createRoom,
   joinRoom,
   listenToRoomUpdates,
   getWaitingRoomsForUser,
-  getRoomData,
   getCurrentUser,
-  updateGameState,
+  deleteRoom,
 } from './utils/firebase';
 
 export default function MatchingScreen() {
@@ -28,8 +29,6 @@ export default function MatchingScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [roomId, setRoomId] = useState('');
   const [isJoining, setIsJoining] = useState(false);
-  const [opponentJoined, setOpponentJoined] = useState(false);
-  const [activeRooms, setActiveRooms] = useState<string[]>([]);
 
   // コンポーネントマウント時にデバイスID取得
   useEffect(() => {
@@ -39,7 +38,6 @@ export default function MatchingScreen() {
 
         // デバイスIDを取得
         const user = await getCurrentUser();
-        console.log('デバイスID', user);
 
         if (user) {
           setUserId(user.uid);
@@ -64,27 +62,37 @@ export default function MatchingScreen() {
     initializeDevice();
   }, []);
 
+  // 部屋IDをクリップボードにコピーする
+  const copyRoomIdToClipboard = async () => {
+    try {
+      await Clipboard.setStringAsync(roomId);
+      Alert.alert('コピー完了', '部屋IDがクリップボードにコピーされました');
+    } catch (error) {
+      console.error('クリップボードコピーエラー:', error);
+      Alert.alert('エラー', 'コピーに失敗しました');
+    }
+  };
+
   // アクティブな部屋があるか確認
   const checkForActiveRooms = async (uid: string) => {
     try {
       const rooms = await getWaitingRoomsForUser(uid);
-      setActiveRooms(rooms);
 
       if (rooms.length > 0) {
         // アクティブな部屋が見つかった場合、最初の部屋を選択
         const activeRoomId = rooms[0];
         setRoomId(activeRoomId);
+        setIsJoining(true);
 
-        // 部屋の情報を取得して役割（host/guest）を確認
-        const roomData = await getRoomData(activeRoomId);
-
-        if (roomData) {
-          const role = roomData.hostId === uid ? 'host' : 'guest';
-          // 既存の部屋に接続
-          router.replace(
-            `/game?mode=online&roomId=${activeRoomId}&role=${role}`
-          );
-        }
+        // 部屋のデータ変更を監視
+        listenToRoomUpdates(activeRoomId, (roomData) => {
+          if (roomData && roomData.guestId) {
+            // ゲーム画面に遷移
+            router.replace(
+              `/game?mode=online&roomId=${activeRoomId}&role=host`
+            );
+          }
+        });
       }
     } catch (error) {
       console.error('部屋の確認エラー:', error);
@@ -103,11 +111,10 @@ export default function MatchingScreen() {
 
       // 部屋のデータ変更を監視
       listenToRoomUpdates(newRoomId, (roomData) => {
+        console.log('roomData', roomData);
         if (roomData && roomData.guestId) {
-          setOpponentJoined(true);
-
           // ゲーム画面に遷移
-          router.push(`/game?mode=online&roomId=${newRoomId}&role=host`);
+          router.replace(`/game?mode=online&roomId=${newRoomId}&role=host`);
         }
       });
     } catch (error) {
@@ -130,20 +137,26 @@ export default function MatchingScreen() {
 
       if (success) {
         // 参加成功したらゲーム画面に遷移
-        router.push(`/game?mode=online&roomId=${roomId}&role=guest`);
+        router.replace(`/game?mode=online&roomId=${roomId}&role=guest`);
       } else {
-        Alert.alert(
-          'エラー',
-          '部屋への参加に失敗しました。部屋IDを確認してください。'
-        );
+        if (Platform.OS === 'web') {
+          alert('部屋への参加に失敗しました。部屋IDを確認してください。');
+        } else {
+          Alert.alert(
+            'エラー',
+            '部屋への参加に失敗しました。部屋IDを確認してください。'
+          );
+        }
         setIsLoading(false);
       }
     } catch (error) {
       console.error('部屋参加エラー:', error);
+
       Alert.alert(
         'エラー',
         '部屋への参加に失敗しました。もう一度お試しください。'
       );
+
       setIsLoading(false);
     }
   };
@@ -161,7 +174,19 @@ export default function MatchingScreen() {
 
         <View style={styles.roomIdContainer}>
           <Text style={styles.roomIdLabel}>部屋ID:</Text>
-          <Text style={styles.roomIdText}>{roomId}</Text>
+          <View style={styles.roomIdRow}>
+            <Text style={styles.roomIdText}>{roomId}</Text>
+            <TouchableOpacity
+              onPress={copyRoomIdToClipboard}
+              style={styles.copyButton}
+            >
+              <MaterialCommunityIcons
+                name="content-copy"
+                size={20}
+                color="#0ff"
+              />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.roomIdHint}>
             この部屋IDを友達に教えてください
           </Text>
@@ -169,16 +194,14 @@ export default function MatchingScreen() {
 
         <TouchableOpacity
           style={[styles.button, styles.cancelButton]}
-          onPress={() => {
+          onPress={async () => {
             setIsJoining(false);
             setIsLoading(false);
-            // 監視をクリーンアップする処理を追加（utils/firebaseに実装必要）
-            if (roomId) {
-              // 監視を停止する関数を呼び出す
-            }
+            // 監視を停止する関数を呼び出す
+            await deleteRoom(roomId);
           }}
         >
-          <Text style={styles.buttonText}>キャンセル</Text>
+          <Text style={styles.buttonTextCancel}>キャンセル</Text>
         </TouchableOpacity>
       </View>
     );
@@ -198,70 +221,72 @@ export default function MatchingScreen() {
     <LinearGradient colors={['#000420', '#000000']} style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => router.replace('/')}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color="#0ff" />
+          <Text style={styles.title}>トップに戻る</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>オンライン対戦</Text>
       </View>
 
-      {userId && (
-        <View style={styles.userIdContainer}>
-          <Text style={styles.userIdLabel}>あなたのID:</Text>
-          <Text style={styles.userIdText}>{userId}</Text>
-        </View>
-      )}
+      <View style={styles.contentWrapper}>
+        {userId && (
+          <View style={styles.userIdContainer}>
+            <Text style={styles.userIdLabel}>あなたのID:</Text>
+            <Text style={styles.userIdText}>{userId}</Text>
+          </View>
+        )}
 
-      <View style={styles.content}>
-        {isLoggedIn ? (
-          isJoining ? (
-            renderWaitingScreen()
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={handleCreateRoom}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#0ff" />
-                ) : (
-                  <Text style={styles.buttonText}>部屋を作る</Text>
-                )}
-              </TouchableOpacity>
-
-              <View style={styles.separator}>
-                <View style={styles.separatorLine} />
-                <Text style={styles.separatorText}>または</Text>
-                <View style={styles.separatorLine} />
-              </View>
-
-              <View style={styles.joinContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="部屋IDを入力"
-                  placeholderTextColor="#555"
-                  value={roomId}
-                  onChangeText={setRoomId}
-                />
+        <View style={styles.content}>
+          {isLoggedIn ? (
+            isJoining ? (
+              renderWaitingScreen()
+            ) : (
+              <>
                 <TouchableOpacity
-                  style={[styles.button, !roomId && styles.buttonDisabled]}
-                  onPress={handleJoinRoom}
-                  disabled={!roomId || isLoading}
+                  style={styles.button}
+                  onPress={handleCreateRoom}
+                  disabled={isLoading}
                 >
                   {isLoading ? (
                     <ActivityIndicator size="small" color="#0ff" />
                   ) : (
-                    <Text style={styles.buttonText}>部屋に入る</Text>
+                    <Text style={styles.buttonText}>部屋を作る</Text>
                   )}
                 </TouchableOpacity>
-              </View>
-            </>
-          )
-        ) : (
-          <Text style={styles.loadingText}>ログイン中...</Text>
-        )}
+
+                <View style={styles.separator}>
+                  <View style={styles.separatorLine} />
+                  <Text style={styles.separatorText}>または</Text>
+                  <View style={styles.separatorLine} />
+                </View>
+
+                <View style={styles.joinContainer}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="部屋IDを入力"
+                    placeholderTextColor="#555"
+                    value={roomId}
+                    onChangeText={setRoomId}
+                  />
+                  <TouchableOpacity
+                    style={[styles.button, !roomId && styles.buttonDisabled]}
+                    onPress={handleJoinRoom}
+                    disabled={!roomId || isLoading}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color="#0ff" />
+                    ) : (
+                      <Text style={styles.buttonText}>部屋に入る</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )
+          ) : (
+            <Text style={styles.loadingText}>ログイン中...</Text>
+          )}
+        </View>
       </View>
     </LinearGradient>
   );
@@ -274,11 +299,16 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 40,
     marginBottom: 60,
   },
   backButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    width: '100%',
     padding: 10,
   },
   title: {
@@ -289,6 +319,13 @@ const styles = StyleSheet.create({
     textShadowColor: '#0ff',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 10,
+  },
+  contentWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    maxWidth: 500,
+    alignSelf: 'center',
   },
   content: {
     flex: 1,
@@ -312,6 +349,11 @@ const styles = StyleSheet.create({
   buttonText: {
     fontFamily: 'Orbitron-Regular',
     color: '#0ff',
+    fontSize: 18,
+  },
+  buttonTextCancel: {
+    fontFamily: 'Orbitron-Regular',
+    color: '#f55',
     fontSize: 18,
   },
   separator: {
@@ -373,24 +415,31 @@ const styles = StyleSheet.create({
     borderColor: '#0ff',
     alignItems: 'center',
     marginBottom: 30,
-    width: '80%',
   },
   roomIdLabel: {
     color: '#888',
     marginBottom: 5,
+  },
+  roomIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 10,
   },
   roomIdText: {
     fontFamily: 'Orbitron-Bold',
     fontSize: 24,
     color: '#0ff',
     letterSpacing: 2,
-    marginVertical: 10,
   },
   roomIdHint: {
     color: '#888',
     fontSize: 12,
     marginTop: 10,
     textAlign: 'center',
+  },
+  copyButton: {
+    marginLeft: 10,
+    padding: 5,
   },
   cancelButton: {
     backgroundColor: 'rgba(255, 0, 0, 0.1)',
@@ -406,7 +455,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     alignSelf: 'center',
-    width: '80%',
   },
   userIdLabel: {
     color: '#888',

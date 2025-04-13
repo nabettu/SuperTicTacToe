@@ -21,9 +21,9 @@ const sleep = (ms: number): Promise<void> => {
 
 // CPUレベルの日本語表示用
 const cpuLevelText = {
-  easy: 'かんたん',
-  normal: 'ふつう',
-  hard: 'むずかしい',
+  easy: 'Easy',
+  normal: 'Normal',
+  hard: 'Hard',
 };
 
 // ユーティリティ関数を修正
@@ -91,6 +91,8 @@ export default function GameScreen() {
   const [waitingForOpponent, setWaitingForOpponent] = useState<boolean>(false);
   const [opponentDisconnected, setOpponentDisconnected] =
     useState<boolean>(false);
+  const [showGameStart, setShowGameStart] = useState<boolean>(true);
+  const [showWinnerScreen, setShowWinnerScreen] = useState<boolean>(false);
 
   // オンラインモードの自分のプレイヤー種別を設定
   const myPlayer: Player | null = isOnlineMode ? (isHost ? 'O' : 'X') : null;
@@ -154,6 +156,30 @@ export default function GameScreen() {
     }
   }, [currentPlayer, winner]);
 
+  // ゲーム開始時の「GAME START」表示を制御（オンラインモード用の条件を追加）
+  useEffect(() => {
+    // ゲーム開始時にGAME STARTを表示し、2秒後に非表示にする
+    if (showGameStart) {
+      const timer = setTimeout(() => {
+        setShowGameStart(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showGameStart]);
+
+  // 勝者が決まった時に勝利画面を表示
+  useEffect(() => {
+    if (winner) {
+      // 少し遅延させて勝利画面を表示（ゲームの状態変化を認識できるように）
+      const timer = setTimeout(() => {
+        setShowWinnerScreen(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowWinnerScreen(false);
+    }
+  }, [winner]);
+
   // オンラインモード用の部屋状態同期
   useEffect(() => {
     if (isOnlineMode && roomId) {
@@ -191,7 +217,7 @@ export default function GameScreen() {
           );
         }
 
-        // ゲーム状態の同期
+        // ゲーム状態の同期（showGameStartを更新しないように修正）
         if (roomData.status === 'playing') {
           setBoard(roomData.board);
           setBoardMeta(roomData.boardMeta);
@@ -399,16 +425,27 @@ export default function GameScreen() {
   const resetGame = () => {
     setBoard(Array(9).fill(null));
     setBoardMeta(Array(9).fill(null));
-    setCurrentPlayer('O');
+    // オンラインモードの場合は現在のプレイヤーの逆からスタート
+    const nextStartPlayer: Player = isOnlineMode
+      ? currentPlayer === 'O'
+        ? 'X'
+        : 'O'
+      : 'O';
+    setCurrentPlayer(nextStartPlayer);
     setWinner(null);
     setMoveCount(0);
     setFadingPieceIndex(null);
+    // オンラインモードでない場合のみ、ゲーム開始表示を有効にする
+    if (!isOnlineMode) {
+      setShowGameStart(true);
+    }
+    setShowWinnerScreen(false);
     if (isOnlineMode && roomId) {
       updateGameState(
         roomId,
         [null, null, null, null, null, null, null, null, null],
         [null, null, null, null, null, null, null, null, null],
-        'X',
+        nextStartPlayer,
         null,
         0
       );
@@ -423,6 +460,28 @@ export default function GameScreen() {
     } else {
       return renderPlayerIcon(player, 48, getPlayerColor(player));
     }
+  };
+
+  // 勝利画面のメッセージを作成
+  const getWinnerMessage = () => {
+    if (winner === 'draw') {
+      return '引き分け!';
+    }
+
+    if (mode === 'cpu') {
+      if (winner === 'O') {
+        return 'あなたの勝利!';
+      } else {
+        return 'CPUの勝利!';
+      }
+    }
+
+    if (isOnlineMode) {
+      const isWinnerMe = winner === myPlayer;
+      return isWinnerMe ? 'あなたの勝利!' : '相手の勝利!';
+    }
+
+    return `プレイヤー${winner}の勝利!`;
   };
 
   return (
@@ -466,6 +525,48 @@ export default function GameScreen() {
           <Text style={styles.buttonText}>タイトルへ</Text>
         </TouchableOpacity>
       </View>
+
+      {showGameStart && (
+        <View style={styles.gameStartContainer}>
+          <Text style={styles.gameStartText}>GAME START</Text>
+        </View>
+      )}
+
+      {showWinnerScreen && winner && (
+        <View style={styles.winnerScreenContainer}>
+          <View style={styles.winnerContentContainer}>
+            {winner !== 'draw' && (
+              <View
+                style={[
+                  styles.winnerIconContainer,
+                  { borderColor: getPlayerColor(winner) },
+                ]}
+              >
+                {renderPlayerIcon(winner, 80, getPlayerColor(winner))}
+              </View>
+            )}
+            <Text
+              style={[
+                styles.winnerScreenText,
+                { color: winner !== 'draw' ? getPlayerColor(winner) : '#0ff' },
+              ]}
+            >
+              {getWinnerMessage()}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.continueButton,
+                {
+                  borderColor: '#0ff',
+                },
+              ]}
+              onPress={() => setShowWinnerScreen(false)}
+            >
+              <Text style={styles.continueButtonText}>続ける</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -552,5 +653,78 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 10,
     elevation: 5, // Androidでの対応
+  },
+  gameStartContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 10,
+  },
+  gameStartText: {
+    fontFamily: 'Orbitron-Bold',
+    fontSize: 48,
+    color: '#0ff',
+    textShadowColor: '#0ff',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 15,
+  },
+  winnerScreenContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    zIndex: 10,
+  },
+  winnerContentContainer: {
+    alignItems: 'center',
+    padding: 30,
+    backgroundColor: 'rgba(0, 20, 40, 0.9)',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#0ff',
+  },
+  winnerIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    marginBottom: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  winnerScreenText: {
+    fontFamily: 'Orbitron-Bold',
+    fontSize: 36,
+    textAlign: 'center',
+    textShadowColor: '#0ff',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 15,
+    marginBottom: 30,
+  },
+  continueButton: {
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#0ff',
+    backgroundColor: 'rgba(0, 255, 255, 0.1)',
+  },
+  continueButtonText: {
+    fontFamily: 'Orbitron-Regular',
+    color: '#0ff',
+    fontSize: 18,
+    textShadowColor: '#0ff',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 5,
   },
 });

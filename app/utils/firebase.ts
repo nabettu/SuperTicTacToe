@@ -99,18 +99,12 @@ export const getDeviceId = async (): Promise<string> => {
  */
 export const getCurrentUser = async (): Promise<{ uid: string } | null> => {
   try {
-    const deviceId = await getDeviceId();
-    return deviceId ? { uid: deviceId } : null;
+    const user = await firebaseSignInAnonymously(auth);
+    return user ? { uid: user.user.uid } : null;
   } catch (error) {
     console.error('ユーザー状態取得エラー:', error);
     return null;
   }
-};
-
-// 匿名認証は不要になるため、簡易版のみ残す
-export const signInAnonymously = async (): Promise<{ uid: string }> => {
-  const deviceId = await getDeviceId();
-  return { uid: deviceId };
 };
 
 // ------------------------------------------------------------------------
@@ -201,6 +195,7 @@ export const listenToRoomUpdates = (
 ) => {
   const roomRef = doc(db, 'rooms', roomId);
   return onSnapshot(roomRef, (docSnap) => {
+    console.log('docSnap', docSnap);
     if (docSnap.exists()) {
       callback(docSnap.data() as Omit<Room, 'id'>);
     } else {

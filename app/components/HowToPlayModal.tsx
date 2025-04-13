@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-
+import { Ionicons } from '@expo/vector-icons';
 type HowToPlayModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -26,7 +26,24 @@ const HowToPlayModal: React.FC<HowToPlayModalProps> = ({
     >
       <View style={styles.centeredView}>
         <View style={styles.modalView}>
-          <Text style={styles.modalTitle}>遊び方</Text>
+          <Text style={styles.modalTitle}>
+            Super
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name="ellipse-outline"
+                size={24}
+                color="#0ff"
+                style={styles.icon}
+              />
+              <Ionicons
+                name="close"
+                size={30}
+                color="#0ff"
+                style={styles.icon}
+              />
+            </View>
+            Gameの遊び方
+          </Text>
 
           <ScrollView style={styles.scrollView}>
             <Text style={styles.sectionTitle}>基本ルール</Text>
@@ -40,31 +57,6 @@ const HowToPlayModal: React.FC<HowToPlayModalProps> = ({
             <Text style={styles.ruleText}>
               •
               4つ目の駒を置く際は、一番古い駒が消えます（半透明で表示されている駒）。
-            </Text>
-
-            <Text style={styles.sectionTitle}>操作方法</Text>
-            <Text style={styles.ruleText}>
-              • 空いているマスをタップして駒を置きます。
-            </Text>
-            <Text style={styles.ruleText}>
-              • プレイヤーOは緑色の丸、プレイヤーXは黄色のXで表示されます。
-            </Text>
-            <Text style={styles.ruleText}>
-              • 3つ駒を置いた後は、次のターンで一番古い駒が半透明になります。
-            </Text>
-            <Text style={styles.ruleText}>
-              • その半透明の駒は、次に新しい駒を置くと消えて移動します。
-            </Text>
-
-            <Text style={styles.sectionTitle}>CPU対戦</Text>
-            <Text style={styles.ruleText}>
-              • 「かんたん」：CPUはランダムに駒を置きます。
-            </Text>
-            <Text style={styles.ruleText}>
-              • 「ふつう」：CPUは時々賢い手を打ちます。
-            </Text>
-            <Text style={styles.ruleText}>
-              • 「むずかしい」：CPUは最適な手を打とうとします。
             </Text>
 
             <Text style={styles.sectionTitle}>ヒント</Text>
@@ -97,6 +89,7 @@ const styles = StyleSheet.create({
   },
   modalView: {
     width: '85%',
+    maxWidth: 500,
     maxHeight: '80%',
     backgroundColor: '#001530',
     borderRadius: 20,
@@ -114,9 +107,12 @@ const styles = StyleSheet.create({
     borderColor: '#0ff',
   },
   modalTitle: {
+    display: 'flex',
     fontFamily: 'Orbitron-Bold',
     marginBottom: 20,
     textAlign: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     fontSize: 24,
     color: '#0ff',
     textShadowColor: '#0ff',
@@ -154,6 +150,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Orbitron-Regular',
     color: '#0ff',
     fontSize: 16,
+  },
+  iconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  icon: {
+    textShadowColor: '#0ff',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
 });
 
